@@ -8,7 +8,11 @@ specific RAG security question from the internship assessment brief.
 
 import argparse
 import io
+import os
 import sys
+
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
+
 from neo4j import GraphDatabase
 from tabulate import tabulate
 
@@ -31,13 +35,13 @@ class AtlasQuerier:
         print(f"QUERY: {title}")
         print(f"DESC : {description}")
         print(f"{'-'*80}")
-        
+
         with self.driver.session() as session:
             try:
                 result = session.run(cypher)
                 keys = list(result.keys())
                 records = [list(record.values()) for record in result]
-                
+
                 if not records:
                     print("No records returned.")
                 else:
@@ -50,7 +54,7 @@ class AtlasQuerier:
                                 val = val[:47] + "..."
                             formatted_row.append(val)
                         formatted_records.append(formatted_row)
-                    
+
                     print(tabulate(formatted_records, headers=keys, tablefmt="grid"))
             except Exception as e:
                 print(f"Execution Error: {e}", file=sys.stderr)
@@ -72,7 +76,7 @@ QUERIES = {
                 m.name AS Mitigation,
                 collect(DISTINCT c.name) AS Targeted_Components
             ORDER BY tech.id
-        """
+        """,
     },
     2: {
         "title": "Case Study Kill-Chain Reconstruction (AML.CS0000)",
@@ -87,7 +91,7 @@ QUERIES = {
                 tac.name AS Tactic_Achieved, 
                 r.description AS Step_Context
             ORDER BY Step
-        """
+        """,
     },
     3: {
         "title": "Unmitigated Techniques Gap Analysis",
@@ -102,7 +106,7 @@ QUERIES = {
                 tech.platforms AS Supported_Platforms
             ORDER BY tech.id
             LIMIT 15
-        """
+        """,
     },
     4: {
         "title": "Platform-Specific Threat Profile Comparison",
@@ -116,7 +120,7 @@ QUERIES = {
                 count(DISTINCT tech) AS Distinct_Techniques_Count, 
                 collect(DISTINCT tac.name)[..3] AS Sample_Tactics
             ORDER BY Distinct_Techniques_Count DESC
-        """
+        """,
     },
     5: {
         "title": "Tactic -> Technique -> Mitigation Paths",
@@ -132,7 +136,7 @@ QUERIES = {
                 count(mit) AS Mitigation_Count
             ORDER BY Tactic_ID, Mitigation_Count DESC
             LIMIT 15
-        """
+        """,
     },
     6: {
         "title": "Multi-Hop Incident Forensic Analysis",
@@ -148,7 +152,7 @@ QUERIES = {
                 role.name AS Responsible_Role
             ORDER BY CaseStudy_ID
             LIMIT 15
-        """
+        """,
     },
     7: {
         "title": "Mitigation Coverage Heatmap per Tactic",
@@ -161,7 +165,7 @@ QUERIES = {
                 count(DISTINCT tech) AS Mitigated_Techniques,
                 count(DISTINCT mit) AS Total_Mitigations_Applied
             ORDER BY Total_Mitigations_Applied DESC
-        """
+        """,
     },
     8: {
         "title": "Matrix Tactic Sequence Chain",
@@ -173,7 +177,7 @@ QUERIES = {
                 tac.id AS Tactic_ID, 
                 tac.name AS Tactic_Name
             ORDER BY Order
-        """
+        """,
     },
     9: {
         "title": "Lifecycle Phase & Role Responsibility Matrix",
@@ -185,7 +189,7 @@ QUERIES = {
                 r.name AS Responsible_Role, 
                 count(DISTINCT m) AS Mitigations_Governed
             ORDER BY lp.name, Mitigations_Governed DESC
-        """
+        """,
     },
     10: {
         "title": "Sub-Technique Specialization Traversal",
@@ -200,29 +204,42 @@ QUERIES = {
                 parent.name AS ParentTech_Name, 
                 tac.name AS Tactic
             ORDER BY ParentTech_ID, SubTech_ID
-        """
-    }
+        """,
+    },
+    11: {
+        "title": "OWASP LLM Top 10 -> ATLAS Coverage",
+        "desc": "Show which OWASP categories map to which ATLAS techniques and how many mitigations are available for each.",
+        "cypher": """
+            MATCH (o:OWASPCategory)-[:MAPS_TO]->(t:Technique)
+            OPTIONAL MATCH (m:Mitigation)-[:MITIGATES]->(t)
+            RETURN 
+                o.id AS OWASP_ID,
+                o.name AS OWASP_Category,
+                t.id AS ATLAS_ID,
+                t.name AS ATLAS_Technique,
+                count(DISTINCT m) AS Mitigation_Count
+            ORDER BY OWASP_ID, Mitigation_Count DESC
+        """,
+    },
 }
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Query Interface for MITRE ATLAS Knowledge Graph")
+    parser = argparse.ArgumentParser(
+        description="Query Interface for MITRE ATLAS Knowledge Graph"
+    )
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument(
-        "--all",
-        action="store_true",
-        help="Run all 10 demonstration queries"
+        "--all", action="store_true", help="Run all 11 demonstration queries"
     )
     group.add_argument(
         "--query",
         type=int,
         choices=QUERIES.keys(),
-        help="Run a specific query by its ID (1-10)"
+        help="Run a specific query by its ID (1-11)",
     )
     group.add_argument(
-        "--list",
-        action="store_true",
-        help="List descriptions of all available queries"
+        "--list", action="store_true", help="List descriptions of all available queries"
     )
     args = parser.parse_args()
 
@@ -249,6 +266,10 @@ def main():
 
 if __name__ == "__main__":
     if sys.platform == "win32":
-        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+        sys.stdout = io.TextIOWrapper(
+            sys.stdout.buffer, encoding="utf-8", errors="replace"
+        )
+        sys.stderr = io.TextIOWrapper(
+            sys.stderr.buffer, encoding="utf-8", errors="replace"
+        )
     main()

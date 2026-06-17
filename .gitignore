@@ -1,23 +1,23 @@
-# Environment
-.env
-
 # Python
 __pycache__/
-*.pyc
-*.pyo
-*.egg-info/
-dist/
-build/
+*.py[cod]
+*$py.class
+.env
+venv/
+ENV/
 
-# IDE
-.idea/
+# Streamlit/App Assets
+assets/*.pdf
+assets/*.html
+THREAT_REPORT.pdf
+THREAT_REPORT.md
+graph.html
+
+# IDEs
 .vscode/
-*.swp
-*.swo
+.idea/
 
-# OS
-.DS_Store
-Thumbs.db
-
-# Logs
-*.log
+# Prettier
+node_modules/
+package-lock.json
+package.json

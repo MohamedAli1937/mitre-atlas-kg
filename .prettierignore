@@ -1,0 +1,13 @@
+# Ignore generated files and data
+node_modules
+ATLAS-latest.yaml
+owasp_atlas_mapping.json
+*.pdf
+*.tex
+*.html
+__pycache__
+.env
+.git
+
+# Ignore Python files (handled by Black)
+*.py

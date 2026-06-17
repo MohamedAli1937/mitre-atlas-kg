@@ -1,0 +1,87 @@
+{
+  "owasp_llm_to_mitre_atlas": {
+    "version": "1.1",
+    "last_updated": "2024-05-20",
+    "mappings": [
+      {
+        "owasp_id": "LLM01",
+        "owasp_name": "Prompt Injection",
+        "atlas_techniques": [
+          { "id": "AML.T0051", "name": "LLM Prompt Injection" },
+          { "id": "AML.T0054", "name": "LLM Jailbreak" }
+        ]
+      },
+      {
+        "owasp_id": "LLM02",
+        "owasp_name": "Insecure Output Handling",
+        "atlas_techniques": [
+          { "id": "AML.T0057", "name": "Exploit AI Model Behavior" },
+          { "id": "AML.T0051", "name": "LLM Prompt Injection (Prerequisite)" }
+        ]
+      },
+      {
+        "owasp_id": "LLM03",
+        "owasp_name": "Training Data Poisoning",
+        "atlas_techniques": [
+          { "id": "AML.T0020", "name": "Poison Training Data" },
+          { "id": "AML.T0019", "name": "Publish Poisoned Datasets" }
+        ]
+      },
+      {
+        "owasp_id": "LLM04",
+        "owasp_name": "Model Denial of Service",
+        "atlas_techniques": [
+          { "id": "AML.T0029", "name": "Denial of ML Service" },
+          { "id": "AML.T0034", "name": "Cost Harvesting" }
+        ]
+      },
+      {
+        "owasp_id": "LLM05",
+        "owasp_name": "Supply Chain Vulnerabilities",
+        "atlas_techniques": [
+          { "id": "AML.T0010", "name": "ML Supply Chain Compromise" },
+          { "id": "AML.T0048", "name": "Compromise ML Software Dependencies" }
+        ]
+      },
+      {
+        "owasp_id": "LLM06",
+        "owasp_name": "Sensitive Information Disclosure",
+        "atlas_techniques": [
+          { "id": "AML.T0024", "name": "Exfiltration via ML Inference API" },
+          { "id": "AML.T0025", "name": "Exfiltrate Training Data" }
+        ]
+      },
+      {
+        "owasp_id": "LLM07",
+        "owasp_name": "Insecure Plugin Design",
+        "atlas_techniques": [
+          { "id": "AML.T0053", "name": "LLM Plugin Compromise" }
+        ]
+      },
+      {
+        "owasp_id": "LLM08",
+        "owasp_name": "Excessive Agency",
+        "atlas_techniques": [
+          { "id": "AML.T0058", "name": "AI Agent Context Poisoning" },
+          { "id": "AML.T0061", "name": "AI Agent Tools" }
+        ]
+      },
+      {
+        "owasp_id": "LLM09",
+        "owasp_name": "Overreliance",
+        "atlas_techniques": [
+          { "id": "AML.T0057", "name": "Exploit AI Model Behavior" },
+          { "id": "AML.T0062", "name": "Discover LLM Hallucinations" }
+        ]
+      },
+      {
+        "owasp_id": "LLM10",
+        "owasp_name": "Model Theft",
+        "atlas_techniques": [
+          { "id": "AML.T0024", "name": "Exfiltrate Model" },
+          { "id": "AML.T0035", "name": "Model Inversion" }
+        ]
+      }
+    ]
+  }
+}
