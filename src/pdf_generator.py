@@ -76,9 +76,14 @@ def generate_pdf_report(description, components, threats, owasp_mappings, output
         pdf.set_text_color(0, 0, 0)
         pdf.set_font("Arial", "I", 9)
         pdf.cell(eff_w, 6, clean_text(f"Target Component: {t['component']}"), 0, 1)
-        ow_list = owasp_mappings.get(t["tech_id"], [])
-        if ow_list:
-            pdf.cell(eff_w, 6, clean_text(f"OWASP Mapping: {', '.join(ow_list)}"), 0, 1)
+
+        ow_str = ", ".join(t.get("owasp", [])) if t.get("owasp") else "None"
+        ni_str = ", ".join(t.get("nist", [])) if t.get("nist") else "None"
+        pdf.cell(eff_w, 6, clean_text(f"OWASP: {ow_str}"), 0, 1)
+        pdf.cell(eff_w, 6, clean_text(f"NIST AI RMF: {ni_str}"), 0, 1)
+
+        pdf.set_font("Arial", "", 9)
+
         pdf.set_font("Arial", "", 9)
         if t["description"]:
             pdf.multi_cell(

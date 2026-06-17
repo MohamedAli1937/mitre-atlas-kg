@@ -207,7 +207,12 @@ def generate_report_markdown(description, components, threats, owasp_mappings):
         report.append(f"### {tech_id}: {t['tech_name']}")
         report.append(f"- **Target Component**: {t['component']}")
         report.append(f"- **Reference**: [{tech_id}]({ref_link})")
-        report.append(f"- **OWASP Mapping**: {owasp_str}")
+        
+        ow_str = ", ".join(t.get("owasp", [])) if t.get("owasp") else "None"
+        ni_str = ", ".join(t.get("nist", [])) if t.get("nist") else "None"
+        report.append(f"- **OWASP LLM Top 10**: {ow_str}")
+        report.append(f"- **NIST AI RMF**: {ni_str}")
+
         if t["description"]:
             report.append(f"- **Description**: {t['description']}")
         valid_mits = [m for m in t["mitigations"] if m.get("id")]
@@ -510,6 +515,15 @@ with tab_stats:
         with executor.driver.session() as s:
             res = s.run(cypher)
             records = [dict(r) for r in res]
+        executor.close()
+
+        if records:
+            st.table(pd.DataFrame(records))
+        else:
+            st.info(
+                "No mappings found in graph. Run ingestion with enrichment enabled."
+            )
+ res]
         executor.close()
 
         if records:
