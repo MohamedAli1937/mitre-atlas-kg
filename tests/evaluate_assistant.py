@@ -17,21 +17,37 @@ from build_kg import AtlasIngestor
 
 GOLDEN_SET = [
     {
-        "question": "Which techniques target the inference path of a RAG-based assistant?",
-        "expected_labels": ["Technique", "Component"],
-        "expected_rels": ["HEURISTIC_TARGETS"],
+        "question": "Which techniques target the inference path of a RAG-based assistant?", 
+        "expected_labels": ["Technique", "Component"], 
+        "expected_rels": ["HEURISTIC_TARGETS"]
     },
     {
-        "question": "Find all mitigations owned by an Application Developer.",
-        "expected_labels": ["Mitigation", "Role"],
-        "expected_rels": ["HEURISTIC_OWNED_BY"],
+        "question": "Find all mitigations owned by an Application Developer.", 
+        "expected_labels": ["Mitigation", "Role"], 
+        "expected_rels": ["HEURISTIC_OWNED_BY"]
     },
     {
-        "question": "Show techniques mapped to the EU AI Act or NIST AI RMF.",
+        "question": "Show techniques mapped to the NIST AI RMF.", 
+        "expected_labels": ["Technique", "NISTCategory"], 
+        "expected_rels": ["MAPS_TO"]
+    },
+    {
+        "question": "Which OWASP risks are relevant to a developer working on RAG components?",
+        "expected_labels": ["OWASPCategory", "Technique", "Component"],
+        "expected_rels": ["MAPS_TO", "HEURISTIC_TARGETS"]
+    },
+    {
+        "question": "Show techniques that specialize 'LLM Prompt Injection' and list their mitigations.",
+        "expected_labels": ["Technique", "Mitigation"],
+        "expected_rels": ["SPECIALIZES", "MITIGATES"]
+    },
+    {
+        "question": "List techniques mapped to NIST Govern 1.1 that have no official mitigations.",
         "expected_labels": ["Technique", "NISTCategory"],
-        "expected_rels": ["MAPS_TO"],
-    },
+        "expected_rels": ["MAPS_TO"]
+    }
 ]
+
 
 
 def run_performance_eval():
