@@ -259,7 +259,47 @@ class AtlasIngestor:
         )
 
         self.ingest_owasp_mapping(os.path.join("data", "owasp_atlas_mapping.json"))
+        self.ingest_nist_rmf(os.path.join("data", "nist_ai_rmf_mapping.json"))
         logging.info("Ingestion complete.")
+
+    def ingest_nist_rmf(self, json_path):
+        """Maps NIST AI RMF categories to ATLAS techniques."""
+        if not os.path.exists(json_path):
+            return
+        logging.info("Ingesting NIST AI RMF mappings...")
+        with open(json_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        query = """
+        UNWIND $batch AS row
+        MERGE (n:NISTCategory {id: row.nist_id})
+        SET n.name = row.nist_name
+        WITH n, row
+        UNWIND row.atlas_techniques AS tech
+        MATCH (t:Technique {id: tech.id})
+        MERGE (n)-[:MAPS_TO]->(t)
+        """
+        with self.driver.session() as session:
+            session.run(query, batch=data)
+
+    def get_stats(self):
+        """Returns comprehensive graph statistics."""
+        queries = {
+            "Matrices": "MATCH (n:Matrix) RETURN count(n)",
+            "Tactics": "MATCH (n:Tactic) RETURN count(n)",
+            "Techniques": "MATCH (n:Technique) RETURN count(n)",
+            "Mitigations": "MATCH (n:Mitigation) RETURN count(n)",
+            "CaseStudies": "MATCH (n:CaseStudy) RETURN count(n)",
+            "OWASPCategories": "MATCH (n:OWASPCategory) RETURN count(n)",
+            "NISTCategories": "MATCH (n:NISTCategory) RETURN count(n)",
+            "HeuristicComponents": "MATCH (n:Component) RETURN count(n)",
+            "UnmitigatedTechniques": "MATCH (t:Technique) WHERE NOT (:Mitigation)-[:MITIGATES]->(t) RETURN count(t)",
+        }
+        stats = {}
+        with self.driver.session() as session:
+            for label, q in queries.items():
+                stats[label] = session.run(q).single()[0]
+        return stats
 
 
 if __name__ == "__main__":

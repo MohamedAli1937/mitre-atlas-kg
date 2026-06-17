@@ -32,6 +32,7 @@ Nodes:
 - LifecyclePhase {name: STRING} -- heuristic mapping representing mitigation phases
 - Role {name: STRING} -- heuristic mapping representing organizational roles owning mitigations
 - OWASPCategory {id: STRING, name: STRING} -- OWASP LLM Top 10 categories mapped to ATLAS
+- NISTCategory {id: STRING, name: STRING} -- NIST AI RMF categories mapped to ATLAS
 
 Relationships:
 - (:Matrix)-[:SEQUENCES {position: INTEGER}]->(:Tactic)
@@ -43,6 +44,7 @@ Relationships:
 - (:Mitigation)-[:HEURISTIC_APPLIES_TO]->(:LifecyclePhase)
 - (:Mitigation)-[:HEURISTIC_OWNED_BY]->(:Role)
 - (:OWASPCategory)-[:MAPS_TO]->(:Technique)
+- (:NISTCategory)-[:MAPS_TO]->(:Technique)
 
 === CRITICAL TRANSLATION RULES ===
 1. Generate READ-ONLY queries ONLY. Use MATCH, WHERE, RETURN, collect, count, etc.

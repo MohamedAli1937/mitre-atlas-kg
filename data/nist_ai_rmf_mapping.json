@@ -1,0 +1,17 @@
+[
+  {
+    "nist_id": "Govern 1.1",
+    "nist_name": "Policies and procedures are in place to address AI risks",
+    "atlas_techniques": [{"id": "AML.T0000"}, {"id": "AML.T0001"}]
+  },
+  {
+    "nist_id": "Map 1.1",
+    "nist_name": "Context is established and documented",
+    "atlas_techniques": [{"id": "AML.T0016"}]
+  },
+  {
+    "nist_id": "Measure 2.1",
+    "nist_name": "AI systems are assessed for trustworthiness",
+    "atlas_techniques": [{"id": "AML.T0024"}]
+  }
+]

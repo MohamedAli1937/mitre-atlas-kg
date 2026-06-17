@@ -273,7 +273,9 @@ st.sidebar.markdown(
 )
 
 st.title("ATLAS Security Center")
-tab_query, tab_threat = st.tabs(["Query Assistant", "Threat Modeler"])
+tab_query, tab_threat, tab_stats = st.tabs(
+    ["Query Assistant", "Threat Modeler", "Compliance & Stats"]
+)
 
 with tab_query:
     st.header("Natural Language Query")
@@ -457,3 +459,62 @@ with tab_threat:
                 st.error(f"PDF generation failed: {pe}")
         st.subheader("Report Preview")
         st.markdown(report_md)
+
+with tab_stats:
+    st.header("Intelligence Dashboard")
+    if not db_online:
+        st.error("Connect to Neo4j to view statistics.")
+    else:
+        from build_kg import AtlasIngestor
+
+        ingestor = AtlasIngestor(
+            config.NEO4J_URI, config.NEO4J_USER, config.NEO4J_PASSWORD
+        )
+        stats = ingestor.get_stats()
+        ingestor.close()
+
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Techniques", stats["Techniques"])
+        col2.metric("Mitigations", stats["Mitigations"])
+        col3.metric("Case Studies", stats["CaseStudies"])
+        col4.metric("Tactics", stats["Tactics"])
+
+        st.subheader("Framework Coverage")
+        total_techs = stats["Techniques"]
+        unmitigated = stats["UnmitigatedTechniques"]
+        coverage = ((total_techs - unmitigated) / total_techs) * 100
+        st.progress(coverage / 100)
+        st.markdown(
+            f"**{coverage:.1f}%** of ATLAS techniques have official mitigations. "
+            f"({unmitigated} coverage gaps identified)"
+        )
+
+        st.divider()
+        st.subheader("Cross-Source Enrichment")
+        src_col1, src_col2, src_col3 = st.columns(3)
+        src_col1.metric("OWASP LLM Top 10", stats["OWASPCategories"])
+        src_col2.metric("NIST AI RMF", stats["NISTCategories"])
+        src_col3.metric("AI Components", stats["HeuristicComponents"])
+
+        st.markdown("### Browse Mappings")
+        map_type = st.radio(
+            "Select Framework", ["OWASP LLM Top 10", "NIST AI RMF"], horizontal=True
+        )
+
+        executor = GraphExecutor()
+        if map_type == "OWASP LLM Top 10":
+            cypher = "MATCH (o:OWASPCategory)-[:MAPS_TO]->(t:Technique) RETURN o.id as ID, o.name as Category, collect(t.id) as ATLAS_Techniques"
+        else:
+            cypher = "MATCH (n:NISTCategory)-[:MAPS_TO]->(t:Technique) RETURN n.id as ID, n.name as Category, collect(t.id) as ATLAS_Techniques"
+
+        with executor.driver.session() as s:
+            res = s.run(cypher)
+            records = [dict(r) for r in res]
+        executor.close()
+
+        if records:
+            st.table(pd.DataFrame(records))
+        else:
+            st.info(
+                "No mappings found in graph. Run ingestion with enrichment enabled."
+            )
