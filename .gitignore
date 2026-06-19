@@ -6,13 +6,6 @@ __pycache__/
 venv/
 ENV/
 
-# Streamlit/App Assets
-assets/*.pdf
-assets/*.html
-THREAT_REPORT.pdf
-THREAT_REPORT.md
-graph.html
-
 # IDEs
 .vscode/
 .idea/
