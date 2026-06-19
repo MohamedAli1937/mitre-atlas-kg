@@ -3,7 +3,7 @@
 > _A graph-native, AI-augmented security intelligence platform that transforms the static MITRE ATLAS™ taxonomy into a machine-reasonable, auditable, and queryable knowledge graph._
 
 **Prepared for:** Voyverse, AI Governance Engineering — Summer 2026 Technical Assessment  
-**Author:** Mohamed Ali
+**Author:** Mohamed Ali BENBELGHITH
 
 ---
 
@@ -32,11 +32,23 @@ This project ingests ATLAS and models it as a **property graph in Neo4j**, then 
 
 - A **Cypher query interface** for forensic security questions
 - An **AI Reasoning Engine** that accepts a natural-language system description and returns a structured threat assessment grounded strictly in graph relationships
-- A **cross-source enrichment layer** that aligns ATLAS techniques with the OWASP LLM Top 10
+- A **cross-source enrichment layer** that aligns ATLAS techniques with the OWASP LLM Top 10 and NIST AI RMF (Govern 1.1, Map 1.2, Measure 2.1)
 - A **PDF export pipeline** that produces traceable, citation-backed threat reports
 - A **quantifiable evaluation suite** that measures query accuracy against a golden set
 
 The design philosophy is **grounding over generation**: every answer the system produces is rooted in a physical graph traversal, not in free-text LLM inference. This makes the output auditable.
+
+The system produces fully reproducible outputs and deliverables stored in the `assets/` directory, including:
+
+- `demo.mp4` — full system demonstration video
+- `THREAT_REPORT.md` — exemple of markdown threat modeling report
+- `THREAT_REPORT.pdf` — exemple of formatted PDF export of a threat report
+- `report.pdf` — additional evaluation/legacy report output
+- `Voyverse Literature Review.xlsx` — enrichment and mapping dataset used in the knowledge graph pipeline
+
+### Demo
+
+[Watch Demo Video](assets/demo.mp4)
 
 ---
 
@@ -80,6 +92,7 @@ Graph wins here — not as a dogma, but as the right tool for this data shape.
 - **Reasoning Engine** — Describe any AI system in plain text; receive a structured, graph-grounded threat assessment
 - **PDF Report Generator** — Produces a human-readable threat-modelling report with clickable citations back to MITRE documentation
 - **OWASP LLM Top 10 Cross-Enrichment** — Aligns ATLAS techniques to the OWASP taxonomy via `[:MAPS_TO]` edges
+- **NIST AI RMF Cross-Enrichment** — Aligns ATLAS techniques to NIST AI RMF governance categories (Govern, Map, Measure) via `[:MAPS_TO]`-style heuristic mappings.
 - **Evaluation Suite** — Benchmarks Syntactic Accuracy and Grounding Accuracy against a curated golden set of NL questions
 
 ---
@@ -87,10 +100,17 @@ Graph wins here — not as a dogma, but as the right tool for this data shape.
 ## Project Structure
 
 ```
-atlas-kg/
+mitre-atlas-kg/
 ├── st_app.py                  # Streamlit entry point
 ├── requirements.txt
 ├── .env.example
+├── .prettierignore
+├── assets/
+│   ├── demo.mp4                         # Full system demonstration video
+│   ├── THREAT_REPORT.md                 # Markdown threat modeling report
+│   ├── THREAT_REPORT.pdf                # PDF threat report
+│   ├── report.pdf                       # FINAL REPORT of the whole project
+│   └── Voyverse_Literature_Review.xlsx  # Literature review + enrichment dataset
 ├── src/
 │   ├── build_kg.py            # Ingestion pipeline
 │   ├── llm_client.py          # Unified LLM wrapper
@@ -100,16 +120,15 @@ atlas-kg/
 │   └── config.py              # Centralized configuration
 ├── data/
 │   ├── ATLAS-latest.yaml      # MITRE ATLAS source
-│   └── owasp_atlas_mapping.json # OWASP mapping file
-├── tests/
-│   ├── evaluate_assistant.py  # Benchmarking suite
-│   └── demo_queries.py        # Expert-authored Cypher tests
-└── assets/                    # Generated reports & graphs
-
+│   ├── owasp_atlas_mapping.json
+│   └── nist_ai_rmf_mapping.json
+└── tests/
+    ├── evaluate_assistant.py  # Benchmarking suite
+    └── demo_queries.py       # Expert-authored Cypher tests
 ```
 
 **Why this structure?**  
-`src/` isolates business logic from the UI layer (`st_app.py`), making the graph engine independently testable. `tests/` is a first-class directory, not an afterthought, because evaluation was scoped as a deliverable, not a bonus.
+`src/` isolates business logic from the UI layer (`st_app.py`), making the graph engine independently testable. `tests/` is a first-class directory, not an afterthought, because evaluation was scoped as a deliverable, not a bonus. Graph HTML and PDF exports are generated in memory at runtime (not written to disk).
 
 ---
 
@@ -120,6 +139,7 @@ atlas-kg/
 (:Mitigation)-[:MITIGATES]->(:Technique)
 (:CaseStudy)-[:EMPLOYS]->(:Technique)
 (:OWASPCategory)-[:MAPS_TO]->(:Technique)
+(:NISTCategory)-[:MAPS_TO]->(:Technique)
 (:Technique)-[:HEURISTIC_TARGETS]->(:Component)
 (:Mitigation)-[:HEURISTIC_OWNED_BY]->(:Role)
 ```
@@ -137,6 +157,7 @@ The bottom two relationship types are **heuristic** — they do not exist in the
 | `:Component`     | `name` (e.g., `RAG`, `VectorDB`, `Orchestrator`)      |
 | `:Role`          | `name` (e.g., `Application Developer`, `ML Engineer`) |
 | `:OWASPCategory` | `id`, `name`                                          |
+| `:NISTCategory`  | `id`, `name`                                          |
 
 ---
 
@@ -291,13 +312,12 @@ The evaluation suite (`tests/evaluate_assistant.py`) tests the NL-to-Cypher assi
 
 All four optional extensions from the brief are implemented:
 
-| Extension               | Implementation                                                         | File                                                        |
-| ----------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------- |
-| Reasoning Engine        | NL system description → structured threat assessment grounded in graph | `src/query_assistant.py` + `st_app.py` (Threat Modeler tab) |
-| Document Drafting       | PDF threat-modelling report with traceable MITRE citations             | `src/pdf_generator.py`                                      |
-| Cross-Source Enrichment | OWASP LLM Top 10 aligned via `[:MAPS_TO]` edges                        | `src/build_kg.py` + `data/owasp_atlas_mapping.json`         |
-
-| Evaluation | Syntactic + Grounding accuracy benchmarking suite | `tests/evaluate_assistant.py` |
+| Extension               | Implementation                                                          | File                                                                                  |
+| ----------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Reasoning Engine        | NL system description → structured threat assessment grounded in graph  | `src/query_assistant.py` + `st_app.py`                                                |
+| Document Drafting       | PDF threat-modelling report with traceable MITRE citations              | `src/pdf_generator.py`                                                                |
+| Cross-Source Enrichment | OWASP LLM Top 10 + NIST AI RMF aligned via `[:MAPS_TO]` heuristic edges | `src/build_kg.py` + `data/owasp_atlas_mapping.json` + `data/nist_ai_rmf_mapping.json` |
+| Evaluation              | Syntactic + Grounding accuracy benchmarking suite                       | `tests/evaluate_assistant.py`                                                         |
 
 ## Development & Standards
 
@@ -307,6 +327,7 @@ To maintain code quality and consistency, this project uses the following tools:
 - **[Prettier](https://prettier.io/)**: For formatting Markdown, JSON, and YAML files.
 
 To format the codebase:
+
 ```bash
 # Format Python files
 black .

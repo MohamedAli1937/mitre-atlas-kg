@@ -19,7 +19,7 @@ from llm_client import LLMClientWrapper
 DEFAULT_OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 DEFAULT_OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:1.5b")
 
-SYSTEM_PROMPT = """You are an expert database administrator. Your task is to translate natural language user questions into valid Cypher queries for a Neo4j database representing the MITRE ATLAS framework.
+SYSTEM_PROMPT = """You are an expert Neo4j Cypher query generator for the MITRE ATLAS knowledge graph.
 
 === DATABASE SCHEMA ===
 Nodes:
@@ -34,32 +34,111 @@ Nodes:
 - Role {name: STRING}
 - LifecyclePhase {name: STRING}
 
-=== CRITICAL RELATIONSHIP DIRECTIONS (DO NOT REVERSE) ===
-- (t:Technique)-[:ACHIEVES]->(tac:Tactic)
+=== RELATIONSHIPS (DIRECTIONAL) ===
+- (t:Technique)-[:ACHIEVES]->(ta:Tactic)
 - (m:Mitigation)-[:MITIGATES]->(t:Technique)
 - (cs:CaseStudy)-[:EMPLOYS]->(t:Technique)
 - (sub:Technique)-[:SPECIALIZES]->(parent:Technique)
-- (mat:Matrix)-[:SEQUENCES]->(tac:Tactic)
-- (t:Technique)-[:HEURISTIC_TARGETS]->(comp:Component)
+- (mat:Matrix)-[:SEQUENCES]->(ta:Tactic)
+- (t:Technique)-[:HEURISTIC_TARGETS]->(c:Component)
 - (m:Mitigation)-[:HEURISTIC_OWNED_BY]->(r:Role)
 - (m:Mitigation)-[:HEURISTIC_APPLIES_TO]->(lp:LifecyclePhase)
 - (o:OWASPCategory)-[:MAPS_TO]->(t:Technique)
 - (n:NISTCategory)-[:MAPS_TO]->(t:Technique)
 
-=== CRITICAL TRANSLATION RULES ===
-1. Generate READ-ONLY queries ONLY.
-2. VARIABLE CONSISTENCY: Every variable in RETURN/WHERE must match the MATCH clause.
-3. NO NEW VARIABLES IN EXISTS: Do not use `WHERE EXISTS ((x)-[:R]->(y))`. Instead, use multiple MATCH clauses: 
-   `MATCH (o:OWASPCategory)-[:MAPS_TO]->(t:Technique) MATCH (n:NISTCategory)-[:MAPS_TO]->(t) RETURN t.id, o.id, n.id`
-4. OPTIONAL DATA: To show categories *if they exist* but still show the technique if they don't, use `OPTIONAL MATCH`.
-5. FRAMEWORK DIRECTIONS (FIXED):
-   - (o:OWASPCategory)-[:MAPS_TO]->(t:Technique)
-   - (n:NISTCategory)-[:MAPS_TO]->(t:Technique)
-6. MULTI-SOURCE TEMPLATE: To see all three sources, use:
-   `MATCH (t:Technique) OPTIONAL MATCH (o:OWASPCategory)-[:MAPS_TO]->(t) OPTIONAL MATCH (n:NISTCategory)-[:MAPS_TO]->(t) RETURN t.name, o.name, n.name`
-7. Output Cypher inside ```cypher and ``` blocks. No explanations.
-"""
+=== CRITICAL RULES ===
 
+1. READ-ONLY ONLY
+Return only Cypher queries inside ```cypher``` blocks. No explanations.
+
+2. SINGLE-ANCHOR DESIGN (MANDATORY)
+Always anchor queries on exactly one primary node type (prefer Technique).
+Never require multiple node types to exist simultaneously.
+
+3. NO INNER-JOIN BEHAVIOR
+Never use multiple MATCH clauses that eliminate rows due to missing relationships.
+
+FORBIDDEN:
+MATCH (t:Technique)
+MATCH (o)-[:MAPS_TO]->(t)
+MATCH (n)-[:MAPS_TO]->(t)
+
+4. OPTIONAL RELATIONSHIP RULE (CRITICAL)
+OWASPCategory and NISTCategory are sparse.
+
+- Always use OPTIONAL MATCH
+- Never use them as filters (no WHERE conditions requiring them)
+- Never reduce Technique results because of missing OWASP/NIST links
+- They are enrichment only, not selection criteria
+- Always return actual nodes (o, n), not labels() or derived metadata
+
+Correct pattern:
+MATCH (t:Technique)
+OPTIONAL MATCH (o:OWASPCategory)-[:MAPS_TO]->(t)
+OPTIONAL MATCH (n:NISTCategory)-[:MAPS_TO]->(t)
+RETURN t, o, n
+LIMIT 25
+
+5. RELATIONSHIP USAGE RULE (CRITICAL)
+Relationships are NEVER properties.
+
+FORBIDDEN:
+- t.HEURISTIC_TARGETS
+- IN [(c:Component {...})]
+
+ONLY valid:
+(a)-[:REL]->(b)
+MATCH (a)-[:REL]->(b)
+
+6. COMPONENT SEMANTICS (CRITICAL)
+- Technique = attack/mitigation method
+- Component = system/architecture element (RAG, LLM, API, pipeline)
+
+Correct:
+MATCH (t:Technique)-[:HEURISTIC_TARGETS]->(c:Component)
+WHERE toLower(c.name) CONTAINS toLower($keyword)
+RETURN t, c
+
+7. RETURN QUALITY RULE (CRITICAL)
+Never use labels(), node properties as fake aggregations, or unrelated metadata.
+
+FORBIDDEN:
+- labels(t)
+- collect(labels(t))
+- returning only computed metadata instead of graph nodes
+
+Always return actual nodes or relationships.
+
+Correct aggregation:
+collect(DISTINCT ta) AS tactics
+
+8. SAFE DEFAULT QUERY
+When uncertain:
+MATCH (t:Technique)
+RETURN t
+LIMIT 25
+
+9. FILTER SAFETY RULE
+Prefer CONTAINS + toLower() over exact matching unless explicitly confirmed.
+
+10. FORBIDDEN PATTERNS
+- treating relationships as properties
+- INNER JOIN across sparse node types
+- IN [(node pattern)]
+- labels() misuse
+- multi-MATCH dependency chains
+
+11. INTENT PRIORITY RULE (CRITICAL)
+
+The relationship used MUST directly match the user question.
+
+- If user asks "tactics" → ONLY use :ACHIEVES
+- If user asks "mitigations" → ONLY use :MITIGATES
+- If user asks "components" → ONLY use :HEURISTIC_TARGETS
+
+Never substitute OWASP/NIST enrichment templates for other relationship queries.
+
+"""
 
 
 def extract_cypher(model_output):
@@ -111,12 +190,38 @@ class GraphExecutor:
     def close(self):
         self.driver.close()
 
+    def execute(self, cypher_query):
+        with self.driver.session() as session:
+            try:
+                result = session.run(cypher_query)
+                records = list(result)
+                return True, None, len(records)
+            except Exception as e:
+                return False, str(e), 0
+
     def execute_and_print(self, cypher_query):
         with self.driver.session() as session:
             try:
                 result = session.run(cypher_query)
                 keys = list(result.keys())
-                records = [list(record.values()) for record in result]
+
+                def serialize_value(value):
+                    if value is None:
+                        return None
+                    if hasattr(value, "items"):  # Neo4j Node / Relationship
+                        return dict(value)
+                    if isinstance(value, list):
+                        return [serialize_value(v) for v in value]
+                    return value
+
+                keys = list(result.keys())
+
+                records = []
+                for record in result:
+                    row = []
+                    for value in record.values():
+                        row.append(serialize_value(value))
+                    records.append(row)
                 if not records:
                     print("\n[i] Query executed successfully, but returned 0 records.")
                     return True, None

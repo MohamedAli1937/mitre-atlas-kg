@@ -10,6 +10,10 @@ ENV/
 .vscode/
 .idea/
 
+# Generated artifacts (Pyvis, exports)
+lib/
+*.html
+
 # Prettier
 node_modules/
 package-lock.json

@@ -4,8 +4,10 @@ Streamlit GUI for the MITRE ATLAS Knowledge Graph.
 
 import os
 import sys
+import tempfile
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
+sys.path.append(os.path.join(os.path.dirname(__file__), "tests"))
 
 import re
 import json
@@ -15,7 +17,6 @@ import streamlit as st
 import networkx as nx
 from pyvis.network import Network
 import streamlit.components.v1 as st_components
-import subprocess
 
 import config
 from llm_client import LLMClientWrapper
@@ -26,6 +27,7 @@ from query_assistant import (
     validate_cypher_safety,
     GraphExecutor,
 )
+from evaluate_assistant import run_schema_recall_eval, run_performance_eval
 
 DEFAULT_OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 DEFAULT_OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:1.5b")
@@ -53,6 +55,125 @@ st.markdown(
 """,
     unsafe_allow_html=True,
 )
+
+
+def serialize(value):
+    if value is None:
+        return None
+    if hasattr(value, "items"):
+        return dict(value)
+    if isinstance(value, list):
+        return [serialize(v) for v in value]
+    return value
+
+
+def normalize_query_value(value):
+    if value is None:
+        return None
+    if hasattr(value, "items"):
+        return dict(value)
+    if isinstance(value, list):
+        return [normalize_query_value(v) for v in value]
+    return value
+
+
+def format_display_value(value):
+    if value is None:
+        return None
+    if isinstance(value, list):
+        if not value:
+            return None
+        if any(isinstance(x, (dict, list)) for x in value):
+            return json.dumps(value, ensure_ascii=False)
+        return ", ".join(str(x) for x in value)
+    if isinstance(value, dict):
+        return json.dumps(value, ensure_ascii=False)
+    return value
+
+
+def flatten_query_record(record):
+    flat = {}
+    for key, value in record.items():
+        value = normalize_query_value(value)
+        if isinstance(value, dict):
+            for prop, prop_val in value.items():
+                flat[f"{key}_{prop}"] = format_display_value(prop_val)
+        else:
+            flat[key] = format_display_value(value)
+    return flat
+
+
+def fetch_query_results(session, cypher):
+    res = session.run(cypher)
+    keys = list(res.keys())
+    records = [
+        {k: normalize_query_value(v) for k, v in zip(keys, record.values())}
+        for record in res
+    ]
+    return [flatten_query_record(r) for r in records]
+
+
+def render_evaluation_results(eval_results):
+    schema = eval_results["schema"]
+    performance = eval_results["performance"]
+
+    st.subheader("Evaluation Suite Results")
+    st.caption(
+        "Benchmarks graph completeness and whether the NL-to-Cypher assistant "
+        "generates schema-valid queries for sample questions."
+    )
+
+    st.markdown("#### Graph coverage")
+    st.caption("Share of ingested ATLAS techniques that have at least one mitigation.")
+    cov1, cov2, cov3, cov4 = st.columns(4)
+    cov1.metric("Techniques", schema["total_techniques"])
+    cov2.metric("With mitigations", schema["mitigated"])
+    cov3.metric("Coverage gaps", schema["unmitigated"])
+    cov4.metric("Mitigation coverage", f"{schema['coverage_pct']:.1f}%")
+
+    st.markdown("#### Cross-source enrichment")
+    st.caption("Counts of mapped framework categories and AI-enriched components in Neo4j.")
+    enr1, enr2, enr3 = st.columns(3)
+    enr1.metric("OWASP LLM Top 10", schema["owasp_categories"])
+    enr2.metric("NIST AI RMF", schema["nist_categories"])
+    enr3.metric("AI components", schema["heuristic_components"])
+
+    st.markdown("#### NL → Cypher benchmark")
+    passed = sum(1 for row in performance if row["grounding"] == "PASS")
+    succeeded = sum(1 for row in performance if row["execution"] == "SUCCESS")
+    avg_latency = (
+        sum(row["latency_s"] for row in performance) / len(performance)
+        if performance
+        else 0
+    )
+    bench1, bench2, bench3 = st.columns(3)
+    bench1.metric("Grounding pass rate", f"{passed}/{len(performance)}")
+    bench2.metric("Execution success", f"{succeeded}/{len(performance)}")
+    bench3.metric("Avg latency", f"{avg_latency:.2f}s")
+
+    summary_df = pd.DataFrame(
+        [
+            {
+                "#": row["#"],
+                "Question": row["question"],
+                "Latency": f"{row['latency_s']:.2f}s",
+                "Grounding": row["grounding"],
+                "Execution": row["execution"],
+                "Rows returned": row["records"],
+            }
+            for row in performance
+        ]
+    )
+    st.dataframe(summary_df, use_container_width=True, hide_index=True)
+
+    with st.expander("Generated Cypher per test question"):
+        for row in performance:
+            st.markdown(f"**{row['#']}. {row['question']}**")
+            st.code(row["cypher"], language="cypher")
+            st.caption(
+                f"{row['latency_s']:.2f}s · Grounding: {row['grounding']} · "
+                f"Execution: {row['execution']} · {row['records']} rows"
+            )
 
 
 def check_neo4j_connection():
@@ -174,12 +295,22 @@ def visualize_graph(components_list):
         bgcolor="#0e1117",
         font_color="white",
         notebook=True,
+        cdn_resources="remote",
     )
     net.from_nx(G)
     net.toggle_physics(True)
-    path = os.path.join("assets", "graph.html")
-    net.show(path)
-    return path
+    return net.generate_html()
+
+
+def build_pdf_bytes(description, components, threats, owasp_mappings):
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+        path = tmp.name
+    try:
+        generate_pdf_report(description, components, threats, owasp_mappings, path)
+        with open(path, "rb") as pdf_file:
+            return pdf_file.read()
+    finally:
+        os.unlink(path)
 
 
 def generate_report_markdown(description, components, threats, owasp_mappings):
@@ -207,7 +338,7 @@ def generate_report_markdown(description, components, threats, owasp_mappings):
         report.append(f"### {tech_id}: {t['tech_name']}")
         report.append(f"- **Target Component**: {t['component']}")
         report.append(f"- **Reference**: [{tech_id}]({ref_link})")
-        
+
         ow_str = ", ".join(t.get("owasp", [])) if t.get("owasp") else "None"
         ni_str = ", ".join(t.get("nist", [])) if t.get("nist") else "None"
         report.append(f"- **OWASP LLM Top 10**: {ow_str}")
@@ -266,10 +397,20 @@ llm_client = LLMClientWrapper(provider_key, model, endpoint, api_key)
 
 st.sidebar.markdown("---")
 if st.sidebar.button("Run Evaluation Suite"):
-    with st.spinner("Running benchmarks..."):
-        eval_script = os.path.join("tests", "evaluate_assistant.py")
-        result = subprocess.run(["python", eval_script], capture_output=True, text=True)
-        st.sidebar.text_area("Evaluation Result", value=result.stdout, height=300)
+    if not db_online:
+        st.sidebar.error("Neo4j is offline.")
+    else:
+        with st.spinner("Running benchmarks..."):
+            try:
+                st.session_state["eval_results"] = {
+                    "schema": run_schema_recall_eval(verbose=False),
+                    "performance": run_performance_eval(
+                        llm_client=llm_client, verbose=False
+                    ),
+                }
+                st.sidebar.success("Done — open Compliance & Stats.")
+            except Exception as e:
+                st.sidebar.error(f"Evaluation failed: {e}")
 
 st.sidebar.markdown("---")
 st.sidebar.markdown(
@@ -312,11 +453,7 @@ with tab_query:
                         success, error = executor.execute_and_print(cypher)
                         if success:
                             with executor.driver.session() as s:
-                                res = s.run(cypher)
-                                keys = list(res.keys())
-                                records = [
-                                    dict(zip(keys, record.values())) for record in res
-                                ]
+                                records = fetch_query_results(s, cypher)
                             executor.close()
                             if not records:
                                 st.info("Query returned 0 records.")
@@ -350,12 +487,7 @@ with tab_query:
                                         ok2, e2 = executor.execute_and_print(fixed)
                                         if ok2:
                                             with executor.driver.session() as s:
-                                                res = s.run(fixed)
-                                                keys = list(res.keys())
-                                                records = [
-                                                    dict(zip(keys, record.values()))
-                                                    for record in res
-                                                ]
+                                                records = fetch_query_results(s, fixed)
                                             executor.close()
                                             if not records:
                                                 st.info(
@@ -429,9 +561,7 @@ with tab_threat:
         components_detected = st.session_state.get("components_detected", [])
         owasp_mappings = load_owasp_mappings()
         st.subheader("Graph Visualization")
-        graph_path = visualize_graph(components_detected)
-        with open(graph_path, "r", encoding="utf-8") as f:
-            html_content = f.read()
+        html_content = visualize_graph(components_detected)
         st_components.html(html_content, height=450)
         st.subheader("Export")
         col_md, col_pdf = st.columns(2)
@@ -444,16 +574,12 @@ with tab_threat:
             )
         with col_pdf:
             try:
-                pdf_filename = os.path.join("assets", "THREAT_REPORT.pdf")
-                generate_pdf_report(
+                pdf_bytes = build_pdf_bytes(
                     st.session_state["system_description"],
                     st.session_state["components_detected"],
                     st.session_state["threats_found"],
                     owasp_mappings,
-                    pdf_filename,
                 )
-                with open(pdf_filename, "rb") as pdf_file:
-                    pdf_bytes = pdf_file.read()
                 st.download_button(
                     label="Download PDF",
                     data=pdf_bytes,
@@ -467,6 +593,9 @@ with tab_threat:
 
 with tab_stats:
     st.header("Intelligence Dashboard")
+    if st.session_state.get("eval_results"):
+        render_evaluation_results(st.session_state["eval_results"])
+        st.divider()
     if not db_online:
         st.error("Connect to Neo4j to view statistics.")
     else:
@@ -514,15 +643,22 @@ with tab_stats:
 
         with executor.driver.session() as s:
             res = s.run(cypher)
-            records = [dict(r) for r in res]
-        executor.close()
 
-        if records:
-            st.table(pd.DataFrame(records))
-        else:
-            st.info(
-                "No mappings found in graph. Run ingestion with enrichment enabled."
-            )
+            def normalize(value):
+                # Neo4j Node
+                if hasattr(value, "items"):
+                    return dict(value)
+                # lists (like collect())
+                if isinstance(value, list):
+                    return [normalize(v) for v in value]
+                # dicts (maps)
+                if isinstance(value, dict):
+                    return {k: normalize(v) for k, v in value.items()}
+                return value
+
+            records = []
+            for r in res:
+                records.append({k: normalize(v) for k, v in r.items()})
         executor.close()
 
         if records:
