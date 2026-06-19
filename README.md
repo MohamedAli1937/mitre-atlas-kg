@@ -26,7 +26,7 @@
 
 ## Overview
 
-MITRE ATLAS™ (Adversarial Threat Landscape for AI Systems) is the primary public taxonomy for adversarial attacks against AI/ML systems. In its native form it is a YAML file — human-readable, but not machine-queryable.
+MITRE ATLAS™ (Adversarial Threat Landscape for AI Systems) is the primary public taxonomy for adversarial attacks against AI/ML systems. In its native form, it is a YAML file — human-readable, but not machine-queryable.
 
 This project ingests ATLAS and models it as a **property graph in Neo4j**, then builds an application layer on top:
 
@@ -40,15 +40,18 @@ The design philosophy is **grounding over generation**: every answer the system 
 
 The system produces fully reproducible outputs and deliverables stored in the `assets/` directory, including:
 
-- `demo.mp4` — full system demonstration video
-- `THREAT_REPORT.md` — exemple of markdown threat modeling report
-- `THREAT_REPORT.pdf` — exemple of formatted PDF export of a threat report
+- `THREAT_REPORT.md` — example of markdown threat modeling report
+- `THREAT_REPORT.pdf` — example of formatted PDF export of a threat report
 - `report.pdf` — additional evaluation/legacy report output
 - `Voyverse Literature Review.xlsx` — enrichment and mapping dataset used in the knowledge graph pipeline
 
 ### Demo
 
-[Watch Demo Video](assets/demo.mp4)
+
+
+https://github.com/user-attachments/assets/bb779c00-d1c7-4624-a357-e9deb3d0bf89
+
+
 
 ---
 
@@ -106,7 +109,6 @@ mitre-atlas-kg/
 ├── .env.example
 ├── .prettierignore
 ├── assets/
-│   ├── demo.mp4                         # Full system demonstration video
 │   ├── THREAT_REPORT.md                 # Markdown threat modeling report
 │   ├── THREAT_REPORT.pdf                # PDF threat report
 │   ├── report.pdf                       # FINAL REPORT of the whole project
@@ -340,7 +342,7 @@ npx prettier --write .
 
 ## LLM Disclosure
 
-LLM tools were used during development of this project. Specifically:
+LLM tools were used during the development of this project. Specifically:
 
 - **Claude (Anthropic)** was used for drafting and iterating on this README and the technical report
 - **Qwen2.5 / Llama3 via Ollama** are used at runtime for AI-driven component NER during graph enrichment
