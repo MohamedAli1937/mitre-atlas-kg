@@ -523,7 +523,6 @@ with tab_stats:
             st.info(
                 "No mappings found in graph. Run ingestion with enrichment enabled."
             )
- res]
         executor.close()
 
         if records:
